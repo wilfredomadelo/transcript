@@ -216,10 +216,7 @@ h1 {
 
 .description {
     margin-top: 30px;
-    background: white;
     padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
 }
 
 .description p {

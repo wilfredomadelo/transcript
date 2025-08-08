@@ -1,9 +1,13 @@
-// YouTube Video ID and configuration
-const VIDEO_ID = 'OKVw7zSZ4S0';
+// YouTube Video ID and configurati
 let player;
 let captions = [];
 let currentCaptionIndex = -1;
 let isTracking = false;
+
+// Get values from data attributes
+const videoContainer = document.getElementById('videoContainer');
+const VIDEO_ID = videoContainer.dataset.videoId;
+const SRT_URL = videoContainer.dataset.srtUrl || 'captions/default.srt';
 
 // Load YouTube IFrame API
 const tag = document.createElement('script');
@@ -43,7 +47,7 @@ function onPlayerStateChange(event) {
 }
 
 // Improved SRT loader with proper error handling
-async function loadSRT(url = 'captions/captions_ALM-YT120.srt') {
+async function loadSRT(url = SRT_URL) {
     try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
