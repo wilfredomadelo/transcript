@@ -15,7 +15,7 @@ firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 function onYouTubeIframeAPIReady() {
     player = new YT.Player('player', {
     height: '480',
-    width: '640',
+    width: '700',
     videoId: VIDEO_ID,
     playerVars: {
         enablejsapi: 1,
@@ -66,10 +66,12 @@ async function loadSRT(url = 'captions/captions_ALM-YT120.srt') {
     }).filter(cap => cap !== null);
     
     renderCaptions();
+    return Promise.resolve(); // Return resolved promise
     } catch (error) {
-    console.error('Failed to load SRT:', error);
+    // console.error('Failed to load SRT:', error);
     captions = getEmbeddedCaptions();
     renderCaptions();
+    return Promise.resolve(); // Return resolved promise even on error
     }
 }
 
@@ -116,55 +118,88 @@ function renderCaptions() {
 
 // Tracking and highlighting functions
 function startTracking() {
-    if (!isTracking) {
+    // console.log('Starting tracking..., current index:', currentCaptionIndex);
     isTracking = true;
     updateHighlight();
-    }
 }
 
 function stopTracking() {
+    // console.log('Stopping tracking...');
     isTracking = false;
 }
 
 function updateHighlight() {
-    if (!isTracking || !player || !captions.length) return;
-
-    const currentTime = player.getCurrentTime();
-    const newIndex = findCurrentCaptionIndex(currentTime);
-
-    if (newIndex !== currentCaptionIndex) {
-    // Remove previous highlight
-    if (currentCaptionIndex >= 0) {
-        const prevElement = document.querySelector(`[data-index="${currentCaptionIndex}"]`);
-        if (prevElement) {
-        prevElement.classList.remove('active');
-        }
+    if (!isTracking || !player || !captions.length) {
+        // console.log('Update highlight stopped:', { isTracking, hasPlayer: !!player, captionsLength: captions.length });
+        return;
     }
 
-    // Add new highlight
-    currentCaptionIndex = newIndex;
-    if (currentCaptionIndex >= 0) {
-        const currentElement = document.querySelector(`[data-index="${currentCaptionIndex}"]`);
-        if (currentElement) {
-        currentElement.classList.add('active');
-        scrollToElement(currentElement);
-        }
+    // Check if transcript container exists
+    const transcriptContainer = document.getElementById('transcript-content');
+    if (!transcriptContainer) {
+        // console.log('Transcript container not found, stopping tracking');
+        return;
     }
+
+    try {
+        const currentTime = player.getCurrentTime();
+        const newIndex = findCurrentCaptionIndex(currentTime);
+
+        if (newIndex !== currentCaptionIndex) {
+            // console.log(`Highlighting changed from ${currentCaptionIndex} to ${newIndex} at time ${currentTime}`);
+
+            // Remove previous highlight
+            if (currentCaptionIndex >= 0) {
+                const prevElement = document.querySelector(`[data-index="${currentCaptionIndex}"]`);
+                if (prevElement) {
+                    prevElement.classList.remove('active');
+                    // console.log(`Removed highlight from ${currentCaptionIndex}`);
+                }
+            }
+
+            // Add new highlight
+            currentCaptionIndex = newIndex;
+            if (currentCaptionIndex >= 0) {
+                const currentElement = document.querySelector(`[data-index="${currentCaptionIndex}"]`);
+                if (currentElement) {
+                    currentElement.classList.add('active');
+                    scrollToElement(currentElement);
+                    // console.log(`Added highlight to ${currentCaptionIndex}`);
+                } else {
+                    // console.log(`Element not found for index ${currentCaptionIndex}`);
+                }
+            }
+        }
+    } catch (error) {
+        console.log('Error in updateHighlight:', error);
     }
 
     if (isTracking) {
-    requestAnimationFrame(updateHighlight);
+        requestAnimationFrame(updateHighlight);
     }
 }
 
 function findCurrentCaptionIndex(currentTime) {
+    // First, try to find exact match (current time is within caption's start and end)
     for (let i = 0; i < captions.length; i++) {
     const caption = captions[i];
     if (currentTime >= caption.start && currentTime <= caption.end) {
         return i;
     }
     }
-    return -1;
+    
+    // If no exact match, find the closest caption (the last one that has started)
+    let closestIndex = -1;
+    for (let i = 0; i < captions.length; i++) {
+    const caption = captions[i];
+    if (currentTime >= caption.start) {
+        closestIndex = i;
+    } else {
+        break; // Since captions are in order, no need to check further
+    }
+    }
+    
+    return closestIndex;
 }
 
 function scrollToElement(element) {
@@ -243,7 +278,49 @@ function showTranscript() {
     videoContainer.classList.add('has-transcript');
 
     // Load captions into the new transcript container
-    loadSRT();
+    loadSRT().then(() => {
+        // Wait a moment for everything to be properly rendered
+        setTimeout(() => {
+            // console.log('Transcript loaded, checking video state...');
+            
+            // Get current video time and highlight the matching caption
+            if (player && player.getCurrentTime) {
+                const currentTime = player.getCurrentTime();
+                const currentIndex = findCurrentCaptionIndex(currentTime);
+                
+                // console.log(`Current time: ${currentTime}, Found index: ${currentIndex}`);
+                
+                // Remove any existing highlights
+                document.querySelectorAll('.caption.active').forEach(el => {
+                    el.classList.remove('active');
+                });
+                
+                if (currentIndex >= 0) {
+                    // Highlight the current caption
+                    const currentElement = document.querySelector(`[data-index="${currentIndex}"]`);
+                    if (currentElement) {
+                        currentElement.classList.add('active');
+                        scrollToElement(currentElement);
+                        currentCaptionIndex = currentIndex;
+                        // console.log(`Highlighted caption ${currentIndex}`);
+                    }
+                }
+                
+                // Force start tracking if video is playing, even if already tracking
+                if (player.getPlayerState && player.getPlayerState() === YT.PlayerState.PLAYING) {
+                    // console.log('Video is playing, forcing tracking restart...');
+                    // Stop any existing tracking first
+                    isTracking = false;
+                    // Then start fresh tracking
+                    setTimeout(() => {
+                        startTracking();
+                    }, 100);
+                } else {
+                    // console.log('Video is not playing');
+                }
+            }
+        }, 500);
+    });
 
     // Update button visibility
     document.querySelector('.show-transcript-btn').style.display = 'none';
